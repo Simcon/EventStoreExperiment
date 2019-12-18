@@ -12,6 +12,7 @@ namespace EventStoreClient
         private EventStoreClient() { }
         private static EventStoreClient instance = null;
         private static ClusterVNode _node;
+        private int _sliceSize = 100;
         public static EventStoreClient Instance
         {
             get
@@ -31,6 +32,14 @@ namespace EventStoreClient
             }
         }
 
+        public async Task Delete(string name, bool hardDelete)
+        {
+            using (var cn = EmbeddedEventStoreConnection.Create(_node))
+            {
+                await cn.DeleteStreamAsync(name, ExpectedVersion.Any, hardDelete);
+            }
+        }
+
         public async Task Append(string stream, string type, byte[] events)
         {
             using (var cn = EmbeddedEventStoreConnection.Create(_node))
@@ -43,23 +52,25 @@ namespace EventStoreClient
             }
         }
 
-        public async Task<List<ResolvedEvent>> List(string stream)
+        public async IAsyncEnumerable<ResolvedEvent> ReadEnumerable(string stream)
         {
-            var streamEvents = new List<ResolvedEvent>();
-
             StreamEventsSlice currentSlice;
             long nextSliceStart = StreamPosition.Start;
             using (var cn = EmbeddedEventStoreConnection.Create(_node))
             {
                 do
                 {
-                    currentSlice = await cn.ReadStreamEventsForwardAsync(stream, nextSliceStart, 200, false);
+                    currentSlice = await cn.ReadStreamEventsForwardAsync(stream, nextSliceStart, _sliceSize, false);
+
+                    foreach(var ev in currentSlice.Events)
+                    {
+                        yield return ev;
+                    }
+
                     nextSliceStart = currentSlice.NextEventNumber;
-                    streamEvents.AddRange(currentSlice.Events);
+
                 } while (!currentSlice.IsEndOfStream);
             }
-
-            return streamEvents;
         }
     }
 }

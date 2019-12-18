@@ -1,5 +1,6 @@
-﻿using EventStoreClient;
+﻿using FluentAssertions;
 using NUnit.Framework;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -7,18 +8,29 @@ namespace EventStoreExperiment.Tests
 {
     public class ClientTests
     {
+        private const string _stream = "test_stream";
+
+        [SetUp]
+        [TearDown]
+        public async Task SetUpTearDown()
+        {
+            var client = EventStoreClient.EventStoreClient.Instance;
+            await client.Delete(_stream, false);
+        }
+
         [Test]
-        public async Task TestWriteAndRead()
+        public async Task TestWriteAndReadEnumerable()
         {
             var client = EventStoreClient.EventStoreClient.Instance;
 
-            var stream = "stream";
             var data = Encoding.UTF8.GetBytes("{\"Foo\":\"Bar\"}");
 
-            await client.Append(stream, "test_event", data);
-            var events = await client.List(stream);
+            await client.Append(_stream, "test_event", data);
+            await client.Append(_stream, "test_event", data);
+            await client.Append(_stream, "test_event", data);
+            var events = await client.ReadEnumerable(_stream).ToListAsync();
 
-            Assert.AreEqual(events[0].Event.Data, data);
+            events.Count.Should().Be(3);
         }
     }
 }
